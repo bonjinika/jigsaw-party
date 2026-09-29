@@ -30,7 +30,9 @@
   --font-num: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", sans-serif;
   --r-lg: 22px;
   --r-md: 14px;
-  --shadow: 0 6px 20px rgba(61, 90, 136, 0.10), 0 1px 3px rgba(61, 90, 136, 0.08);
+  --shadow: 0 6px 20px rgba(61, 90, 136, 0.14), 0 1px 3px rgba(61, 90, 136, 0.10);
+  --glass: rgba(255, 255, 255, 0.86);
+  --glass-soft: rgba(255, 255, 255, 0.55);
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -38,20 +40,24 @@ html, body { margin: 0; }
 body {
   color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.6;
   background-color: var(--sky);
-  background-image:
-    radial-gradient(circle at 12% 8%, rgba(255,255,255,0.9) 0, rgba(255,255,255,0) 32%),
-    radial-gradient(circle at 88% 92%, rgba(255,255,255,0.7) 0, rgba(255,255,255,0) 30%),
-    radial-gradient(rgba(111,163,224,0.13) 1.2px, transparent 1.4px);
-  background-size: auto, auto, 22px 22px;
-  background-attachment: fixed;
   padding-inline: 16px; padding-block: 18px 40px; min-height: 100vh;
 }
 button, select, input { font-family: inherit; color: inherit; }
+
+/* room illustration behind everything; the blink overlay sits exactly over the girl's eyes */
+.scene { position: fixed; z-index: -1; top: 50%; left: 50%; pointer-events: none;
+  width: max(100vw, calc(100vh * 1.7768)); width: max(100vw, calc(100lvh * 1.7768));
+  aspect-ratio: 1672 / 941; transform: translate(-50%, -50%); }
+.scene img { position: absolute; display: block; max-width: none; }
+.scene .bg { inset: 0; width: 100%; height: 100%; }
+.scene .blink { left: 81.9378%; top: 69.6068%; width: 10.4665%; height: 12.7524%; opacity: 0; }
+.scene .blink.on { opacity: 1; }
+@media (max-aspect-ratio: 1/1) { .scene { left: auto; right: 0; transform: translateY(-50%); } }
 :focus-visible { outline: 3px solid var(--blue-mid); outline-offset: 2px; }
 
 .app.lobby-mode { grid-template-columns: 230px minmax(0, 1fr); }
 .app { max-width: 1480px; margin-inline: auto; display: grid; gap: 18px; grid-template-columns: 230px minmax(0, 1fr) 290px; align-items: start; }
-.panel { background: var(--paper); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+.panel { background: var(--glass); border-radius: var(--r-lg); box-shadow: var(--shadow); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 
 /* ---- left column ---- */
 .side { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 18px; }
@@ -74,18 +80,22 @@ button, select, input { font-family: inherit; color: inherit; }
 /* ---- main column ---- */
 .main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .titlebar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
-.chip-title { display: inline-flex; align-items: center; gap: 10px; background: var(--paper); border-radius: 999px; padding: 8px 18px 8px 12px; box-shadow: var(--shadow); font-size: 14.5px; letter-spacing: 0.06em; }
+.chip-title { display: inline-flex; align-items: center; gap: 10px; background: var(--glass); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-radius: 999px; padding: 8px 18px 8px 12px; box-shadow: var(--shadow); font-size: 14.5px; letter-spacing: 0.06em; }
 .chip-title svg { width: 22px; height: 22px; }
 .chip-title b { font-family: var(--font-num); font-weight: 700; }
-.tools { display: flex; gap: 8px; align-items: center; }
+.tools { display: flex; gap: 8px; align-items: center; background: var(--glass); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-radius: 999px; padding: 4px 4px 4px 14px; box-shadow: var(--shadow); }
+.tools .pill { box-shadow: none; }
+.tools label { font-size: 13px; color: var(--ink-soft); }
+.icon-pill { display: inline-flex; align-items: center; gap: 6px; }
+.icon-pill svg { width: 20px; height: 20px; }
 .pill { border: 0; background: var(--paper); box-shadow: var(--shadow); border-radius: 999px; padding: 8px 16px; min-height: 40px; font-size: 14px; cursor: pointer; letter-spacing: 0.04em; }
 .pill:hover { background: var(--paper-soft); }
 .pill[aria-pressed="true"] { background: var(--blue); color: #fff; }
 select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; background-image: linear-gradient(45deg, transparent 50%, var(--ink-soft) 50%), linear-gradient(135deg, var(--ink-soft) 50%, transparent 50%); background-position: calc(100% - 18px) 55%, calc(100% - 13px) 55%; background-size: 5px 5px; background-repeat: no-repeat; background-color: var(--paper); }
 #viewport { width: 100%; overflow: auto; border-radius: var(--r-lg); overscroll-behavior: contain; }
 #stage { position: relative; touch-action: none; user-select: none; -webkit-user-select: none; margin-inline: auto; }
-.zone { position: absolute; border-radius: var(--r-lg); background: var(--paper); box-shadow: var(--shadow); }
-#trayZone { background: rgba(255, 255, 255, 0.72); }
+.zone { position: absolute; border-radius: var(--r-lg); background: var(--glass); box-shadow: var(--shadow); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+#trayZone { background: var(--glass-soft); }
 #trayZone span { position: absolute; left: 18px; top: 10px; font-size: 12px; letter-spacing: 0.14em; color: var(--ink-soft); }
 #frame { position: absolute; border-radius: 6px; background: var(--paper-soft); overflow: hidden; }
 #frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -96,7 +106,29 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
 .cur { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3000; display: flex; align-items: flex-start; gap: 2px; }
 .cur svg { width: 16px; height: 16px; flex: none; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3)); }
 .cur span { font-size: 11px; line-height: 1; padding: 4px 7px; border-radius: 999px; color: #fff; white-space: nowrap; margin-top: 10px; }
+.tips { padding: 10px 16px; display: flex; flex-direction: column; gap: 2px; }
 .hint-line { font-size: 12.5px; color: var(--ink-soft); margin: 0; }
+
+/* ---- BGM ---- */
+.bgm { padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.bgm-head { display: flex; align-items: center; justify-content: space-between; }
+.bgm h2 { margin: 0; font-size: 15px; font-weight: 500; letter-spacing: 0.1em; display: flex; align-items: center; gap: 8px; }
+.bgm h2 svg { width: 20px; height: 20px; }
+.x { border: 0; background: transparent; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 20px; line-height: 1; color: var(--ink-soft); }
+.x:hover { background: var(--paper-soft); }
+.tracks { display: flex; flex-direction: column; gap: 4px; }
+.track { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; text-align: left; padding: 8px 10px; border-radius: 12px; cursor: pointer; font-size: 14px; }
+.track:hover { background: var(--paper-soft); }
+.track i { width: 22px; height: 22px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--sky); color: var(--blue-mid); font-style: normal; font-size: 12px; }
+.track[aria-pressed="true"] { background: var(--sky); font-weight: 500; }
+.track[aria-pressed="true"] i { background: var(--blue-mid); color: #fff; }
+.bgm-row { display: flex; align-items: center; gap: 8px; }
+.bgm-row .soft { flex: 1 1 0; min-width: 0; min-height: 42px; padding: 6px 8px; font-size: 13.5px; white-space: nowrap; letter-spacing: 0.02em; gap: 6px; }
+.bgm-row .soft svg { width: 18px; height: 18px; }
+.vol { display: flex; align-items: center; gap: 10px; }
+.vol label { font-size: 13px; color: var(--ink-soft); white-space: nowrap; }
+.vol input { flex: 1; min-width: 0; accent-color: var(--blue-mid); }
+.vol output { font-family: var(--font-num); font-size: 13px; width: 2.5em; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---- right column ---- */
 .right { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 18px; }
@@ -174,6 +206,7 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
   .nav { flex-direction: row; padding: 6px; }
   .nav button { padding: 8px 14px; font-size: 14.5px; }
   .note { display: none; }
+  .bgm { flex: 1 1 100%; }
   #viewport { max-height: 72vh; }
   .right { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 }
@@ -187,6 +220,7 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
 </style>
 </head>
 <body>
+<div class="scene" aria-hidden="true"><img class="bg" src="images/bg.jpg" alt=""><img class="blink" id="blink" src="images/blink.png" alt=""></div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-squid" viewBox="0 0 48 48">
     <path d="M24 4c-8 0-13 8-13 17 0 3 1 5 3 6l-3 11c-.4 1.6 1.6 2.5 2.6 1.2L19 33l1 9c.2 1.6 2.5 1.8 2.9.2L24 34l1.1 8.2c.4 1.6 2.7 1.4 2.9-.2l1-9 5.4 6.2c1 1.3 3 .4 2.6-1.2l-3-11c2-1 3-3 3-6C37 12 32 4 24 4z" fill="#fff" stroke="#6fa3e0" stroke-width="2.2" stroke-linejoin="round"/>
@@ -199,6 +233,10 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
   <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 9.5v4.3l2.8 1.7M9.5 2.8h5M12 2.8v3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
   <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V17h5v-1.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z" fill="#f2c14e"/><rect x="9.5" y="18" width="5" height="2.6" rx="1.2" fill="#b9c7d9"/></symbol>
   <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M9 17.5V5.8l11-2.3v11.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="6.5" cy="17.5" r="2.8" fill="currentColor"/><circle cx="17.5" cy="15.3" r="2.8" fill="currentColor"/></symbol>
+  <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z" fill="currentColor"/></symbol>
 </svg>
 
@@ -212,7 +250,25 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
     <nav class="nav panel" aria-label="メニュー">
       <button type="button" id="navHome"><svg><use href="#i-home"/></svg>ホーム</button>
       <button type="button" id="navPuzzle" aria-current="page"><svg><use href="#i-piece"/></svg>ジグソー</button>
+      <button type="button" id="navBgm" aria-expanded="false" aria-controls="bgmPanel"><svg><use href="#i-note"/></svg>BGM</button>
     </nav>
+    <section class="bgm panel" id="bgmPanel" hidden aria-label="BGM">
+      <div class="bgm-head">
+        <h2><svg><use href="#i-note"/></svg>BGM</h2>
+        <button type="button" class="x" id="bgmClose" aria-label="BGMの設定を閉じる">×</button>
+      </div>
+      <div class="tracks" id="tracks"></div>
+      <div class="bgm-row">
+        <button type="button" class="soft" id="bgmPlay"><svg><use href="#i-play"/></svg><span>再生</span></button>
+        <button type="button" class="soft" id="bgmMute" aria-pressed="false"><svg><use href="#i-sound"/></svg><span>ミュート</span></button>
+      </div>
+      <div class="vol">
+        <label for="vol">音量</label>
+        <input type="range" id="vol" min="0" max="100" step="1" value="40">
+        <output id="volOut" for="vol">40</output>
+      </div>
+      <p class="msg" id="bgmMsg">BGMは自分の画面だけで流れます。</p>
+    </section>
     <div class="note">すきな景色を<br>パズルで<br>あつめよう<svg class="squid"><use href="#i-squid"/></svg></div>
   </aside>
 
@@ -261,7 +317,8 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
       <div class="titlebar">
         <div class="chip-title"><svg><use href="#i-image"/></svg><span id="puzzleName"><b>#01</b> サンプル</span></div>
         <div class="tools">
-          <label for="zoom" class="msg">拡大</label>
+          <button type="button" class="pill icon-pill" id="quickMute" aria-pressed="false" aria-label="BGMのミュート"><svg><use href="#i-sound"/></svg><span>BGM</span></button>
+          <label for="zoom">拡大</label>
           <select id="zoom" class="pill">
             <option value="1">ぴったり</option>
             <option value="1.5">1.5倍</option>
@@ -278,8 +335,10 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
           <div id="cursors"></div>
         </div>
       </div>
+      <div class="tips panel">
       <p class="hint-line" id="rotateTip" hidden><b>向きバラバラの部屋です。</b>ピースをタップ(クリック)すると右に90°回ります。向きが正しいときだけはまります。</p>
       <p class="hint-line">誰かが持っているピースはその人の色で光り、離すまで動かせません。拡大中は、空いている場所をドラッグすると画面を動かせます。</p>
+      </div>
     </section>
   </main>
 
@@ -327,5 +386,6 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script src="bgm.js"></script>
 </body>
 </html>
