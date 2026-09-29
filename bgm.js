@@ -87,7 +87,7 @@
     if (!ensureCtx()) { setMsg('このブラウザではBGMを再生できません。'); return; }
     var t = trackById(state.track);
     if (!t) return;
-    if (ctx.state === 'suspended') ctx.resume();
+    unlockAudio();
     var token = ++loadToken;
     playing = true; render();
     if (!buffers[t.id]) setMsg('「' + t.title + '」を読み込んでいます…');
@@ -204,22 +204,28 @@
   });
 
   /* Browsers only allow sound after the viewer does something, so music starts on the first tap or key. */
-  function firstGesture(e) {
-    if (unlocked) return cleanup();
-    if (e.target && e.target.closest && e.target.closest('#bgmPanel, #quickMute')) return cleanup();
-    unlocked = true;
-    cleanup();
-    if (state.on && !state.muted) start();
-    else ensureCtx();
+  /* Browsers (iPhone especially) only let a page make sound inside a real tap, click or key press.
+     touchend / click / keydown / mousedown are the events every browser accepts for that. */
+  function unlockAudio() {
+    if (!ensureCtx()) return;
+    try {
+      var b = ctx.createBuffer(1, 1, 22050), s = ctx.createBufferSource();
+      s.buffer = b; s.connect(ctx.destination); s.start(0);
+    } catch (e) {}
+    if (ctx.state !== 'running') { try { ctx.resume(); } catch (e) {} }
   }
-  /* pointerup/touchend (not pointerdown) are what phones accept as permission to play sound */
-  var GESTURES = ['pointerup', 'touchend', 'keydown', 'click'];
-  function cleanup() { GESTURES.forEach(function (n) { document.removeEventListener(n, firstGesture, true); }); }
-  GESTURES.forEach(function (n) { document.addEventListener(n, firstGesture, true); });
-  /* if the audio engine was created too early and is still asleep, wake it on the next tap */
-  ['pointerup', 'touchend', 'keydown'].forEach(function (n) {
-    document.addEventListener(n, function () { if (ctx && playing && ctx.state === 'suspended' && !document.hidden) ctx.resume(); }, true);
-  });
+  function onGesture(e) {
+    if (document.hidden) return;
+    if (!unlocked) {
+      unlocked = true;
+      unlockAudio();
+      var inBgmUi = e.target && e.target.closest && e.target.closest('#bgmPanel, #quickMute, #navBgm');
+      if (!inBgmUi && state.on && !state.muted) start();
+      return;
+    }
+    if (ctx && playing && ctx.state !== 'running') unlockAudio();
+  }
+  ['touchend', 'click', 'keydown', 'mousedown'].forEach(function (n) { document.addEventListener(n, onGesture, true); });
 
   /* Pause while the tab is in the background. */
   document.addEventListener('visibilitychange', function () {
