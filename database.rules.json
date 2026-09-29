@@ -1,0 +1,24 @@
+{
+  "rules": {
+    "rooms": {
+      "$room": {
+        ".read": true,
+        ".write": true,
+        "meta": {
+          ".validate": "newData.hasChildren(['puzzleId', 'cols', 'rows', 'seed', 'createdAt'])"
+        },
+        "pieces": {
+          "$i": {
+            "x": { ".validate": "newData.isNumber()" },
+            "y": { ".validate": "newData.isNumber()" }
+          }
+        },
+        "players": {
+          "$p": {
+            "name": { ".validate": "newData.isString() && newData.val().length <= 12" }
+          }
+        }
+      }
+    }
+  }
+}
