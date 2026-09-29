@@ -163,7 +163,7 @@
   var code = null, base = '', meta = null, G = null, L = null, art = null, P = [], scale = 1;
   var lastVal = null, drag = null, pan = null, doneShown = false, lastCur = 0;
   var curEls = {}, totalMs = null, joined = false, hintTimer = 0, hintPiece = null;
-  var chosenPuzzle = null, chosenSize = '8x6';
+  var chosenPuzzle = null, chosenSize = '8x6', chosenRotate = true;
   var SHADOW = 'drop-shadow(0 2px 3px rgba(45,69,105,0.35))';
   var LIFT = 'drop-shadow(0 10px 12px rgba(45,69,105,0.38))';
 
@@ -238,6 +238,7 @@
       if (!s) { allLocked = false; return; }
       p.holder = s.holder || null;
       p.zSrv = s.z || 0;
+      setRot(p, s.locked ? 0 : (s.rot || 0));
       if (s.locked) {
         p.locked = true; p.tx = p.hx; p.ty = p.hy; solved++;
         if (s.t && s.t > maxT) maxT = s.t;
@@ -318,6 +319,16 @@
     $('hint').disabled = true;
   }
 
+  /* ---------- rotation (quarter turns, 0 = upright) ---------- */
+  function setRot(p, rot) {
+    if (p.rot === undefined) { p.rot = rot; p.ang = p.angT = rot * 90; return; }
+    var d = ((rot - p.rot) % 4 + 4) % 4;
+    if (!d) return;
+    if (d === 3) d = -1;
+    p.rot = rot; p.angT += d * 90;
+  }
+  function pieceSize() { return { w: G.pw + 2 * G.t, h: G.ph + 2 * G.t }; }
+
   /* ---------- animation loop ---------- */
   function tick() {
     for (var i = 0; i < P.length; i++) {
@@ -328,7 +339,8 @@
         if (reduceMotion || Math.abs(dx) + Math.abs(dy) < 0.4) { p.x = p.tx; p.y = p.ty; }
         else { p.x += dx * 0.35; p.y += dy * 0.35; }
       }
-      var tf = 'translate(' + (p.x * scale) + 'px,' + (p.y * scale) + 'px)';
+      if (p.ang !== p.angT) { var da = p.angT - p.ang; p.ang = (reduceMotion || Math.abs(da) < 0.5) ? p.angT : p.ang + da * 0.3; }
+      var tf = 'translate(' + (p.x * scale) + 'px,' + (p.y * scale) + 'px)' + (p.ang ? ' rotate(' + p.ang + 'deg)' : '');
       if (tf !== p.tf) { p.el.style.transform = tf; p.tf = tf; }
     }
     requestAnimationFrame(tick);
@@ -342,7 +354,9 @@
       var p = P[i];
       if (p.locked || !p.el || !p.inited) continue;
       if (p.holder && p.holder !== me.id) continue;
-      var lx = w.x - p.x, ly = w.y - p.y;
+      var sz = pieceSize(), cx = p.x + sz.w / 2, cy = p.y + sz.h / 2;
+      var th = -(p.angT || 0) * Math.PI / 180, ox = w.x - cx, oy = w.y - cy;
+      var lx = ox * Math.cos(th) - oy * Math.sin(th) + sz.w / 2, ly = ox * Math.sin(th) + oy * Math.cos(th) + sz.h / 2;
       if (lx < 0 || ly < 0 || lx >= G.pw + 2 * G.t || ly >= G.ph + 2 * G.t) continue;
       var a = p.ctx.getImageData(Math.floor(lx * k), Math.floor(ly * k), 1, 1).data[3];
       if (a > 30 && (!best || (p.rank || 0) > (best.rank || 0))) best = p;
@@ -369,7 +383,7 @@
     }
     e.preventDefault();
     p.dragging = true;
-    var d = { p: p, dx: w.x - p.x, dy: w.y - p.y, id: e.pointerId, pending: true, up: false, timer: 0 };
+    var d = { p: p, dx: w.x - p.x, dy: w.y - p.y, id: e.pointerId, pending: true, up: false, timer: 0, sx: e.clientX, sy: e.clientY, moved: false };
     drag = d;
     p.el.style.zIndex = 2000; p.el.style.filter = LIFT;
     try { stage.setPointerCapture(e.pointerId); } catch (err) {}
@@ -398,6 +412,8 @@
     var w = toWorld(e);
     if (!drag || e.pointerId !== drag.id) { if (e.pointerType === 'mouse') sendCursor(w); return; }
     var p = drag.p, d = drag;
+    if (!d.moved && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 6) return;
+    d.moved = true;
     p.x = Math.max(-G.t - G.pw * 0.4, Math.min(L.WW - G.pw * 0.6, w.x - d.dx));
     p.y = Math.max(-G.t - G.ph * 0.4, Math.min(L.WH - G.ph * 0.6, w.y - d.dy));
     p.tx = p.x; p.ty = p.y;
@@ -414,9 +430,17 @@
     if (drag === d) drag = null;
     clearTimeout(d.timer); d.timer = 0;
     p.dragging = false;
-    var near = Math.hypot(p.x - p.hx, p.y - p.hy) < Math.min(G.pw, G.ph) * 0.32;
+    if (!d.moved && meta && meta.rotate) {
+      /* a tap turns the piece a quarter clockwise */
+      setRot(p, (p.rot + 1) % 4);
+      pref(p.i).update({ rot: p.rot, holder: null });
+      pref(p.i).child('holder').onDisconnect().cancel();
+      p.el.style.filter = SHADOW;
+      return;
+    }
+    var near = !p.rot && Math.hypot(p.x - p.hx, p.y - p.hy) < Math.min(G.pw, G.ph) * 0.32;
     var upd = near
-      ? { x: p.hx, y: p.hy, locked: true, holder: null, t: TS, by: me.name, byColor: me.color }
+      ? { x: p.hx, y: p.hy, rot: 0, locked: true, holder: null, t: TS, by: me.name, byColor: me.color }
       : { x: r1(p.x), y: r1(p.y), holder: null };
     pref(p.i).update(upd);
     pref(p.i).child('holder').onDisconnect().cancel();
@@ -463,14 +487,14 @@
     $('navPuzzle').setAttribute('aria-current', on ? 'page' : 'false');
     if (on) $('navHome').removeAttribute('aria-current'); else $('navPuzzle').removeAttribute('aria-current');
   }
-  function createRoom(puzzleId, cols, rows) {
+  function createRoom(puzzleId, cols, rows, rotate) {
     var newCode = rid(6), seed = Math.floor(Math.random() * 2000000000) + 1;
     var g = makeGeo(cols, rows, seed), lay = makeLayout(cols, rows), pieces = {}, i, R = Math.random;
     var sw = g.pw + 2 * g.t, sh = g.ph + 2 * g.t;
     var x0 = lay.TX + 8, y0 = lay.TY + 26, xr = Math.max(1, lay.TW - 16 - sw), yr = Math.max(1, lay.TH - 34 - sh);
-    for (i = 0; i < cols * rows; i++) pieces[i] = { x: r1(x0 + R() * xr), y: r1(y0 + R() * yr), z: i + 1, locked: false };
+    for (i = 0; i < cols * rows; i++) pieces[i] = { x: r1(x0 + R() * xr), y: r1(y0 + R() * yr), z: i + 1, locked: false, rot: rotate ? Math.floor(R() * 4) : 0 };
     return db.ref('rooms/' + newCode).set({
-      meta: { puzzleId: puzzleId, cols: cols, rows: rows, seed: seed, createdAt: TS, v: 2 },
+      meta: { puzzleId: puzzleId, cols: cols, rows: rows, seed: seed, createdAt: TS, v: 2, rotate: !!rotate },
       pieces: pieces
     }).then(function () { return newCode; });
   }
@@ -492,7 +516,8 @@
         $('done').hidden = true; $('nextBtn').hidden = true; $('slots').style.opacity = '';
         var lab = puzzleLabel(meta.puzzleId), pn = $('puzzleName');
         pn.textContent = ''; var b = document.createElement('b'); b.textContent = lab.num;
-        pn.appendChild(b); pn.appendChild(document.createTextNode(' ' + lab.title + '・' + (meta.cols * meta.rows) + 'ピース'));
+        pn.appendChild(b); pn.appendChild(document.createTextNode(' ' + lab.title + '・' + (meta.cols * meta.rows) + 'ピース' + (meta.rotate ? '・向きバラバラ' : '')));
+        $('rotateTip').hidden = !meta.rotate;
         showRoomUI(true); setMsg('');
         $('inviteUrl').value = location.origin + location.pathname + '?room=' + code;
         showHintCount();
@@ -559,6 +584,11 @@
       });
     });
   }
+  $('rotates').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    chosenRotate = b.dataset.rotate === '1';
+    $('rotates').querySelectorAll('button').forEach(function (n) { n.setAttribute('aria-pressed', n === b ? 'true' : 'false'); });
+  });
   $('sizes').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
     chosenSize = b.dataset.size;
@@ -591,7 +621,7 @@
     if (!ready()) return;
     if (joinMode) { busy(enterRoom(urlRoom)); return; }
     var sz = chosenSize.split('x');
-    busy(createRoom(chosenPuzzle, +sz[0], +sz[1]).then(function (c) {
+    busy(createRoom(chosenPuzzle, +sz[0], +sz[1], chosenRotate).then(function (c) {
       history.pushState({}, '', '?room=' + c);
       return enterRoom(c);
     }));
@@ -624,7 +654,7 @@
     if (!meta) return;
     $('again').disabled = true;
     var oldCode = code, m = meta;
-    createRoom(m.puzzleId, m.cols, m.rows).then(function (c) {
+    createRoom(m.puzzleId, m.cols, m.rows, m.rotate).then(function (c) {
       db.ref('rooms/' + oldCode + '/next').set(c);
       db.ref(base).off();
       db.ref(base + '/players/' + me.id).remove();

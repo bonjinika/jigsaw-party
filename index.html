@@ -55,13 +55,13 @@ button, select, input { font-family: inherit; color: inherit; }
 
 /* ---- left column ---- */
 .side { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 18px; }
-.logo { padding: 18px 56px 14px 18px; transform: rotate(-2deg); position: relative; }
+.logo { padding: 18px 16px 14px 18px; transform: rotate(-2deg); position: relative; }
 .logo::before { content: ""; position: absolute; top: -10px; left: 26px; width: 10px; height: 26px; border-radius: 3px; background: var(--blue-mid); opacity: 0.7; }
-.logo h1 { margin: 0; font-family: var(--font-hand); font-weight: 400; font-size: 26px; line-height: 1.25; letter-spacing: 0.04em; color: var(--ink); }
+.logo h1 { margin: 0; font-family: var(--font-hand); font-weight: 400; font-size: 24px; line-height: 1.25; letter-spacing: 0.02em; white-space: nowrap; color: var(--ink); }
 .logo h1 span { display: block; }
-.logo .mo { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-family: var(--font-num); font-weight: 700; font-size: 10.5px; letter-spacing: 0.22em; color: var(--ink-soft); }
+.logo .mo { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-family: var(--font-num); font-weight: 700; font-size: 10.5px; letter-spacing: 0.22em; color: var(--ink-soft); white-space: nowrap; }
 .logo .mo::before, .logo .mo::after { content: ""; width: 14px; height: 1.5px; background: var(--ink-soft); }
-.logo .squid { position: absolute; right: 10px; top: 14px; width: 42px; height: 42px; }
+.logo .squid { position: absolute; right: 12px; bottom: 8px; width: 34px; height: 34px; }
 .nav { padding: 10px; display: flex; flex-direction: column; gap: 4px; }
 .nav button { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; background: transparent; text-align: left; font-size: 15.5px; padding: 11px 14px; border-radius: var(--r-md); cursor: pointer; letter-spacing: 0.06em; white-space: nowrap; }
 .nav button:hover { background: var(--paper-soft); }
@@ -170,7 +170,7 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
   .logo { transform: none; padding: 12px 64px 10px 16px; }
   .logo h1 { font-size: 22px; }
   .logo h1 span { display: inline; }
-  .logo .squid { top: 12px; width: 38px; height: 38px; }
+  .logo .squid { bottom: auto; top: 12px; width: 38px; height: 38px; }
   .nav { flex-direction: row; padding: 6px; }
   .nav button { padding: 8px 14px; font-size: 14.5px; }
   .note { display: none; }
@@ -238,6 +238,14 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
             <button type="button" data-size="15x10" aria-pressed="false"><b>150</b>ピース</button>
           </div>
         </div>
+        <div class="field">
+          <span class="lbl">ピースの向き</span>
+          <div class="sizes" id="rotates">
+            <button type="button" data-rotate="1" aria-pressed="true">バラバラ</button>
+            <button type="button" data-rotate="0" aria-pressed="false">そろえる</button>
+          </div>
+          <span class="msg">バラバラにすると、ピースをタップして回しながら組み立てます。</span>
+        </div>
       </div>
       <div class="lobby-actions">
         <button id="go" class="big" type="button"><svg><use href="#i-play"/></svg><span id="goText">部屋をつくる</span></button>
@@ -270,6 +278,7 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
           <div id="cursors"></div>
         </div>
       </div>
+      <p class="hint-line" id="rotateTip" hidden><b>向きバラバラの部屋です。</b>ピースをタップ(クリック)すると右に90°回ります。向きが正しいときだけはまります。</p>
       <p class="hint-line">誰かが持っているピースはその人の色で光り、離すまで動かせません。拡大中は、空いている場所をドラッグすると画面を動かせます。</p>
     </section>
   </main>
