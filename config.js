@@ -11,7 +11,7 @@ window.APP_CONFIG = {
     appId: "1:917981358209:web:71ccc374ac2ea784e50580"
   },
   puzzles: [
-    { id: "sample", title: "ランタンの湖(サンプル)", src: null }
+    { id: "sample", title: "うみの見えるすなはま(サンプル)", src: null }
     // { id: "member01", title: "○○さんの作品", src: "images/member01.jpg" },
   ]
 };

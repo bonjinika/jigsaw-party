@@ -2,15 +2,11 @@
   'use strict';
 
   var CFG = window.APP_CONFIG || {};
-
-  /* The board lives in a fixed "world" of 1600 x 688 units. Every player sees the same
-     world, scaled to their screen, so piece positions can be shared as plain numbers. */
-  var WW = 1600, WH = 688;
-  var FX = 24, FY = 24, FW = 960, FH = 640;      /* frame (where the picture is built) */
-  var TX = 1008, TY = 24, TW = 568, TH = 640;    /* tray (where loose pieces start) */
   var dpr = Math.min(window.devicePixelRatio || 1, 2);
-  var PALETTE = ['#e4572e', '#1d7fb8', '#2f9e5b', '#d99a00', '#c2418a', '#0f9d9a', '#7a5cd1', '#6b7280'];
+  var PALETTE = ['#f08a8a', '#6fa3e0', '#6cc3a0', '#f2b54e', '#b58ee0', '#4fb7c9', '#f29ac8', '#8a9bb5'];
   var CODE_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
+  var HINTS_PER_ROOM = 3;
+  var FW = 960, FH = 640; /* the picture is always cut at this size, in "world" units */
 
   function $(id) { return document.getElementById(id); }
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -18,10 +14,20 @@
   function rid(n) { var s = '', i; for (i = 0; i < n; i++) s += CODE_CHARS.charAt(Math.floor(Math.random() * CODE_CHARS.length)); return s; }
   function r1(n) { return Math.round(n * 10) / 10; }
   function pad2(n) { return n < 10 ? '0' + n : '' + n; }
-  function fmt(ms) { var s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ':' + pad2(s % 60); }
+  function fmt(ms) { var s = Math.max(0, Math.floor(ms / 1000)); return pad2(Math.floor(s / 3600)) + ':' + pad2(Math.floor(s / 60) % 60) + ':' + pad2(s % 60); }
   function setMsg(t, err) { var m = $('lobbyMsg'); m.textContent = t || ''; m.className = 'msg' + (err ? ' err' : ''); }
   var reduceMotion = false;
   try { reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+
+  /* Board layout in world units. Every player sees the same world scaled to their screen,
+     so positions can be shared as plain numbers. The tray grows with the piece count. */
+  function makeLayout(cols, rows) {
+    var n = cols * rows, WW = 1240;
+    var L = { WW: WW, FX: (WW - FW) / 2, FY: 36 };
+    L.TX = 16; L.TY = L.FY + FH + 44; L.TW = WW - 32; L.TH = Math.round(220 + n * 1.7);
+    L.WH = L.TY + L.TH + 16;
+    return L;
+  }
 
   /* ---------- identity ---------- */
   var me = { id: lsGet('jp_id') || rid(10), name: (lsGet('jp_name') || '').slice(0, 12), color: PALETTE[0] };
@@ -46,53 +52,41 @@
   function rng(seed) { return function () { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; }
   function makeSampleArt() {
     var c = document.createElement('canvas'); c.width = FW; c.height = FH;
-    var g = c.getContext('2d'), R = rng(11), i;
-    var sky = g.createLinearGradient(0, 0, 0, 440);
-    sky.addColorStop(0, '#141a45'); sky.addColorStop(0.55, '#b4526a'); sky.addColorStop(1, '#f5a45f');
+    var g = c.getContext('2d'), R = rng(7), i;
+    var sky = g.createLinearGradient(0, 0, 0, 380);
+    sky.addColorStop(0, '#5f9fe6'); sky.addColorStop(1, '#cfe6fb');
     g.fillStyle = sky; g.fillRect(0, 0, FW, FH);
-    for (i = 0; i < 110; i++) {
-      g.fillStyle = 'rgba(255,248,230,' + (0.25 + R() * 0.6) + ')';
-      g.beginPath(); g.arc(R() * FW, R() * 250, R() * 1.4 + 0.3, 0, 7); g.fill();
+    function cloud(x, y, s) {
+      g.fillStyle = 'rgba(255,255,255,0.95)';
+      [[0, 0, 34], [30, -14, 30], [62, -4, 36], [92, 6, 26], [40, 12, 30]].forEach(function (b) { g.beginPath(); g.arc(x + b[0] * s, y + b[1] * s, b[2] * s, 0, 7); g.fill(); });
     }
-    var glow = g.createRadialGradient(700, 150, 10, 700, 150, 190);
-    glow.addColorStop(0, 'rgba(255,240,205,0.85)'); glow.addColorStop(1, 'rgba(255,240,205,0)');
-    g.fillStyle = glow; g.fillRect(400, 0, 560, 400);
-    g.fillStyle = '#fff3d6'; g.beginPath(); g.arc(700, 150, 48, 0, 7); g.fill();
-    g.fillStyle = 'rgba(214,190,150,0.35)';
-    g.beginPath(); g.arc(686, 140, 12, 0, 7); g.arc(716, 168, 8, 0, 7); g.arc(708, 128, 6, 0, 7); g.fill();
-    function ridge(base, amp, color, p) {
-      g.fillStyle = color; g.beginPath(); g.moveTo(0, 460);
-      for (var x = 0; x <= FW; x += 6) {
-        g.lineTo(x, base - amp * (0.5 * Math.sin(x * 0.006 + p) + 0.3 * Math.sin(x * 0.017 + p * 2) + 0.2 * Math.sin(x * 0.041 + p * 3)));
-      }
-      g.lineTo(FW, 460); g.closePath(); g.fill();
-    }
-    ridge(330, 80, '#5a3f78', 1.2); ridge(375, 62, '#39346a', 3.4); ridge(415, 46, '#222650', 5.1);
-    var lake = g.createLinearGradient(0, 430, 0, FH);
-    lake.addColorStop(0, '#2b3a6e'); lake.addColorStop(1, '#0d1330');
-    g.fillStyle = lake; g.fillRect(0, 430, FW, FH - 430);
-    for (i = 0; i < 16; i++) {
-      var rw = 90 - i * 3 + R() * 20;
-      g.fillStyle = 'rgba(255,236,190,' + (0.5 - i * 0.028) + ')';
-      g.fillRect(700 - rw / 2 + (R() - 0.5) * 18, 440 + i * 9, rw, 3);
-    }
-    function lantern(x, y, r, a) {
-      var lg = g.createRadialGradient(x, y, 0, x, y, r * 3.2);
-      lg.addColorStop(0, 'rgba(255,190,90,' + a + ')'); lg.addColorStop(1, 'rgba(255,150,60,0)');
-      g.fillStyle = lg; g.fillRect(x - r * 3.2, y - r * 3.2, r * 6.4, r * 6.4);
-      g.fillStyle = '#ffe2a8'; g.beginPath(); g.ellipse(x, y, r * 0.8, r, 0, 0, 7); g.fill();
-    }
-    for (i = 0; i < 16; i++) lantern(60 + R() * 840, 200 + R() * 190, 3 + R() * 4, 0.55);
-    for (i = 0; i < 26; i++) { var ly = 470 + R() * 150; lantern(40 + R() * 880, ly, 4 + (ly - 470) / 150 * 8, 0.75); }
-    g.fillStyle = '#0a0d1f';
-    for (i = 0; i < 7; i++) {
-      var tx = 20 + i * 34 + R() * 12, th = 130 + R() * 90, tw = 26 + R() * 10;
-      g.beginPath(); g.moveTo(tx, FH + 6); g.lineTo(tx + tw, FH + 6); g.lineTo(tx + tw / 2, FH + 6 - th); g.closePath(); g.fill();
-    }
-    for (i = 0; i < 5; i++) {
-      var ux = 850 + i * 30 + R() * 10, uh = 90 + R() * 70;
-      g.beginPath(); g.moveTo(ux, FH + 6); g.lineTo(ux + 24, FH + 6); g.lineTo(ux + 12, FH - uh); g.closePath(); g.fill();
-    }
+    cloud(90, 110, 1.3); cloud(560, 70, 1.0); cloud(760, 170, 1.5); cloud(330, 210, 0.8);
+    var sea = g.createLinearGradient(0, 330, 0, 470);
+    sea.addColorStop(0, '#2f78c4'); sea.addColorStop(1, '#8cc6ef');
+    g.fillStyle = sea; g.fillRect(0, 330, FW, 140);
+    for (i = 0; i < 40; i++) { g.fillStyle = 'rgba(255,255,255,' + (0.3 + R() * 0.4) + ')'; g.fillRect(R() * FW, 340 + R() * 120, 12 + R() * 30, 2); }
+    g.fillStyle = '#4f8f6a';
+    g.beginPath(); g.moveTo(560, 334); g.quadraticCurveTo(650, 280, 760, 330); g.lineTo(560, 334); g.fill();
+    g.fillStyle = '#fff'; g.fillRect(690, 262, 14, 50); g.fillStyle = '#e05f5f'; g.fillRect(688, 254, 18, 10);
+    var sand = g.createLinearGradient(0, 460, 0, FH);
+    sand.addColorStop(0, '#f6e7c4'); sand.addColorStop(1, '#ecd3a0');
+    g.fillStyle = sand; g.beginPath(); g.moveTo(0, 470);
+    for (var x = 0; x <= FW; x += 20) g.lineTo(x, 468 + Math.sin(x * 0.02) * 6);
+    g.lineTo(FW, FH); g.lineTo(0, FH); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 4; g.beginPath();
+    for (x = 0; x <= FW; x += 20) g.lineTo(x, 470 + Math.sin(x * 0.02) * 6);
+    g.stroke();
+    function shell(x, y, r, col) { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, Math.PI, 0); g.closePath(); g.fill(); }
+    shell(180, 560, 16, '#f7b8b8'); shell(420, 600, 12, '#fff3e0'); shell(820, 570, 18, '#f9d27a');
+    /* a small squid friend on the beach */
+    g.save(); g.translate(610, 520); g.scale(1.6, 1.6);
+    g.fillStyle = '#fff'; g.strokeStyle = '#6fa3e0'; g.lineWidth = 2.2;
+    g.beginPath(); g.moveTo(0, -30); g.bezierCurveTo(-18, -28, -20, 0, -12, 6); g.lineTo(-16, 26); g.lineTo(-6, 12); g.lineTo(-2, 28); g.lineTo(2, 12); g.lineTo(6, 28); g.lineTo(10, 12); g.lineTo(16, 26); g.lineTo(12, 6); g.bezierCurveTo(20, 0, 18, -28, 0, -30); g.fill(); g.stroke();
+    g.fillStyle = '#2d4569'; g.beginPath(); g.arc(-6, -8, 2.2, 0, 7); g.arc(6, -8, 2.2, 0, 7); g.fill();
+    g.fillStyle = '#f4a9b4'; g.beginPath(); g.ellipse(-10, -2, 2.6, 1.5, 0, 0, 7); g.ellipse(10, -2, 2.6, 1.5, 0, 0, 7); g.fill();
+    g.restore();
+    g.strokeStyle = '#2d4569'; g.lineWidth = 2;
+    [[250, 120], [276, 132], [470, 150]].forEach(function (b) { g.beginPath(); g.moveTo(b[0] - 8, b[1]); g.quadraticCurveTo(b[0] - 4, b[1] - 5, b[0], b[1]); g.quadraticCurveTo(b[0] + 4, b[1] - 5, b[0] + 8, b[1]); g.stroke(); });
     return c;
   }
   var artCache = {};
@@ -114,11 +108,13 @@
       img.src = puzzle.src;
     });
   }
-  function findPuzzle(id) {
+  function puzzleIndex(id) {
     var list = CFG.puzzles || [];
-    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
-    return list[0] || { id: 'sample', title: 'サンプル', src: null };
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return i;
+    return 0;
   }
+  function findPuzzle(id) { var list = CFG.puzzles || []; return list[puzzleIndex(id)] || { id: 'sample', title: 'サンプル', src: null }; }
+  function puzzleLabel(id) { return { num: '#' + pad2(puzzleIndex(id) + 1), title: findPuzzle(id).title || '' }; }
 
   /* ---------- geometry (same seed => same cut on every screen) ---------- */
   function mulberry(a) {
@@ -137,7 +133,7 @@
     return { cols: cols, rows: rows, pw: pw, ph: ph, t: Math.min(pw, ph) * 0.26, hs: hs, vs: vs };
   }
   function edge(p, x0, y0, x1, y1, s, t) {
-    var dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy), nx = dy / L, ny = -dx / L;
+    var dx = x1 - x0, dy = y1 - y0, Ln = Math.hypot(dx, dy), nx = dy / Ln, ny = -dx / Ln;
     function P(u, v) { return [x0 + dx * u + nx * v * t * s, y0 + dy * u + ny * v * t * s]; }
     if (!s) { p.lineTo(x1, y1); return; }
     var a = P(0.38, 0); p.lineTo(a[0], a[1]);
@@ -164,24 +160,27 @@
 
   /* ---------- state ---------- */
   var stage = $('stage'), viewport = $('viewport');
-  var code = null, base = '', meta = null, G = null, art = null, P = [], scale = 1;
-  var lastVal = null, drag = null, pan = null, doneShown = false, curTimer = 0, lastCur = 0;
-  var curEls = {}, timerId = null, totalMs = null, joined = false;
-  var chosenPuzzle = null;
+  var code = null, base = '', meta = null, G = null, L = null, art = null, P = [], scale = 1;
+  var lastVal = null, drag = null, pan = null, doneShown = false, lastCur = 0;
+  var curEls = {}, totalMs = null, joined = false, hintTimer = 0, hintPiece = null;
+  var chosenPuzzle = null, chosenSize = '8x6';
+  var SHADOW = 'drop-shadow(0 2px 3px rgba(45,69,105,0.35))';
+  var LIFT = 'drop-shadow(0 10px 12px rgba(45,69,105,0.38))';
 
   function pref(i) { return db.ref(base + '/pieces/' + i); }
 
   /* ---------- layout & rendering ---------- */
+  function place(el, x, y, w, h) { var s = el.style; s.left = (x * scale) + 'px'; s.top = (y * scale) + 'px'; s.width = (w * scale) + 'px'; s.height = (h * scale) + 'px'; }
   function layout() {
     var vw = viewport.clientWidth || 320, z = +$('zoom').value || 1;
-    scale = (vw * z) / WW;
-    stage.style.width = (WW * scale) + 'px';
-    stage.style.height = (WH * scale) + 'px';
-    var f = $('frame').style;
-    f.left = (FX * scale) + 'px'; f.top = (FY * scale) + 'px'; f.width = (FW * scale) + 'px'; f.height = (FH * scale) + 'px';
-    var t = $('tray').style;
-    t.left = (TX * scale) + 'px'; t.top = (TY * scale) + 'px'; t.width = (TW * scale) + 'px'; t.height = (TH * scale) + 'px';
-    var l = $('trayLabel').style; l.left = ((TX + 10) * scale) + 'px'; l.top = ((TY + 6) * scale) + 'px';
+    var fit = vw / L.WW;
+    if (window.innerWidth > 1100) fit = Math.min(fit, Math.max(320, window.innerHeight - 110) / L.WH);
+    scale = fit * z;
+    stage.style.width = (L.WW * scale) + 'px';
+    stage.style.height = (L.WH * scale) + 'px';
+    place($('frameZone'), L.FX - 20, L.FY - 20, FW + 40, FH + 40);
+    place($('trayZone'), L.TX, L.TY, L.TW, L.TH);
+    place($('frame'), L.FX, L.FY, FW, FH);
     var k = scale * dpr, w = Math.ceil(FW * k), h = Math.ceil(FH * k);
     [$('slots'), $('ghost')].forEach(function (cv) { cv.width = w; cv.height = h; });
     if (art) $('ghost').getContext('2d').drawImage(art, 0, 0, w, h);
@@ -192,10 +191,13 @@
     var cv = $('slots'), ctx = cv.getContext('2d'), k = scale * dpr;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.setTransform(k, 0, 0, k, 0, 0);
-    ctx.strokeStyle = getComputedStyle(stage).getPropertyValue('--slot') || 'rgba(0,0,0,.3)';
-    ctx.lineWidth = 1 / scale;
+    ctx.strokeStyle = 'rgba(111,163,224,0.55)';
+    ctx.lineWidth = 1.2 / scale;
     for (var r = 0; r < G.rows; r++) for (var c = 0; c < G.cols; c++) {
-      ctx.save(); ctx.translate(c * G.pw, r * G.ph); ctx.stroke(piecePath(G, r, c, 0, 0)); ctx.restore();
+      ctx.save(); ctx.translate(c * G.pw, r * G.ph);
+      var path = piecePath(G, r, c, 0, 0);
+      if (hintPiece && hintPiece.r === r && hintPiece.c === c) { ctx.fillStyle = 'rgba(242,193,78,0.45)'; ctx.fill(path); }
+      ctx.stroke(path); ctx.restore();
     }
   }
   function renderPieces() {
@@ -208,24 +210,25 @@
       var cv = document.createElement('canvas');
       cv.width = Math.ceil(sw * k); cv.height = Math.ceil(sh * k);
       cv.style.width = (sw * scale) + 'px'; cv.style.height = (sh * scale) + 'px';
-      cv.className = 'piece' + (p.locked ? ' locked' : '');
-      var ctx = cv.getContext('2d'), path = piecePath(G, p.r, p.c, t, t);
+      cv.className = 'piece';
+      var ctx = cv.getContext('2d', { willReadFrequently: true }), path = piecePath(G, p.r, p.c, t, t);
       ctx.setTransform(k, 0, 0, k, 0, 0);
       ctx.save(); ctx.clip(path);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(pad, p.c * pw * k, p.r * ph * k, sw * k, sh * k, 0, 0, sw * k, sh * k);
       ctx.restore();
       ctx.setTransform(k, 0, 0, k, 0, 0); ctx.lineJoin = 'round';
-      ctx.strokeStyle = 'rgba(0,0,0,0.38)'; ctx.lineWidth = 1.2 / scale; ctx.stroke(path);
-      ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = 0.6 / scale; ctx.stroke(path);
+      ctx.strokeStyle = 'rgba(45,69,105,0.35)'; ctx.lineWidth = 1.2 / scale; ctx.stroke(path);
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 0.6 / scale; ctx.stroke(path);
       p.el = cv; p.ctx = ctx; p.tf = '';
+      if (hintPiece === p) cv.classList.add('hinted');
       stage.appendChild(cv);
     });
     if (lastVal) applyRoom(lastVal);
   }
 
   /* ---------- applying the shared state ---------- */
-  function playerColor(id, players) { return players && players[id] && players[id].color || '#888'; }
+  function playerColor(id, players) { return players && players[id] && players[id].color || '#8a9bb5'; }
   function applyRoom(val) {
     lastVal = val;
     if (!val.pieces || !P.length) return;
@@ -236,10 +239,9 @@
       p.holder = s.holder || null;
       p.zSrv = s.z || 0;
       if (s.locked) {
-        if (!p.locked) { p.locked = true; if (p.el) p.el.classList.add('locked'); }
-        p.tx = p.hx; p.ty = p.hy; solved++;
+        p.locked = true; p.tx = p.hx; p.ty = p.hy; solved++;
         if (s.t && s.t > maxT) maxT = s.t;
-        p.by = s.by || ''; p.byColor = s.byColor || '#888';
+        if (hintPiece === p) clearHint();
       } else {
         allLocked = false;
         if (!p.dragging) { p.tx = s.x; p.ty = s.y; }
@@ -251,23 +253,26 @@
     P.forEach(function (p) {
       if (!p.el) return;
       p.el.style.zIndex = p.dragging ? 2000 : p.locked ? 5 : 10 + (p.rank || 0);
-      if (p.locked) p.el.style.filter = '';
-      else if (p.dragging) p.el.style.filter = 'drop-shadow(0 8px 10px rgba(0,0,0,0.42))';
-      else if (p.holder && p.holder !== me.id) p.el.style.filter = 'drop-shadow(0 0 3px ' + playerColor(p.holder, players) + ') drop-shadow(0 0 6px ' + playerColor(p.holder, players) + ')';
-      else p.el.style.filter = '';
+      if (p.locked) p.el.style.filter = 'none';
+      else if (p.dragging) p.el.style.filter = LIFT;
+      else if (p.holder && p.holder !== me.id) { var col = playerColor(p.holder, players); p.el.style.filter = 'drop-shadow(0 0 3px ' + col + ') drop-shadow(0 0 7px ' + col + ')'; }
+      else p.el.style.filter = SHADOW;
     });
-    $('count').textContent = solved + ' / ' + P.length;
+    var n = P.length, pct = n ? Math.floor(solved * 100 / n) : 0;
+    $('pct').firstChild.nodeValue = pct;
+    $('barFill').style.width = pct + '%';
+    $('left').firstChild.nodeValue = n - solved;
     renderPeople(players);
     renderCursors(players);
-    if (allLocked && !doneShown) showDone(maxT, ps);
+    if (allLocked) showDone(maxT, ps, players);
     if (val.next && val.next !== code) { $('nextBtn').hidden = false; $('nextBtn').dataset.code = val.next; }
   }
   function renderPeople(players) {
-    var box = $('people'), ids = Object.keys(players);
+    var box = $('people');
     box.textContent = '';
-    ids.forEach(function (id) {
+    Object.keys(players).forEach(function (id) {
       var pl = players[id], chip = document.createElement('span'), dot = document.createElement('i');
-      chip.className = 'chip'; dot.style.background = pl.color || '#888';
+      chip.className = 'person'; dot.style.background = pl.color || '#8a9bb5';
       chip.appendChild(dot);
       chip.appendChild(document.createTextNode((pl.name || '名無し') + (id === me.id ? '(あなた)' : '')));
       box.appendChild(chip);
@@ -285,29 +290,32 @@
         el.innerHTML = '<svg viewBox="0 0 16 16"><path d="M1 1l5 14 2.2-5.6L14 7z" fill="currentColor" stroke="#fff" stroke-width="1"/></svg><span></span>';
         box.appendChild(el); curEls[id] = el;
       }
-      el.style.color = pl.color || '#888';
-      var sp = el.querySelector('span'); sp.textContent = pl.name || ''; sp.style.background = pl.color || '#888';
+      el.style.color = pl.color || '#8a9bb5';
+      var sp = el.querySelector('span'); sp.textContent = pl.name || ''; sp.style.background = pl.color || '#8a9bb5';
       el.style.transform = 'translate(' + (pl.cur.x * scale) + 'px,' + (pl.cur.y * scale) + 'px)';
     });
     Object.keys(curEls).forEach(function (id) {
       if (!seen[id]) { if (curEls[id].parentNode) curEls[id].parentNode.removeChild(curEls[id]); delete curEls[id]; }
     });
   }
-  function showDone(maxT, ps) {
+  function showDone(maxT, ps, players) {
     doneShown = true;
-    totalMs = (maxT && meta) ? maxT - meta.createdAt : null;
+    totalMs = (maxT && meta) ? Math.max(0, maxT - meta.createdAt) : null;
     var tally = {}, colors = {};
-    Object.keys(ps).forEach(function (k) { var s = ps[k]; if (s.locked) { var n = s.by || '名無し'; tally[n] = (tally[n] || 0) + 1; colors[n] = s.byColor || '#888'; } });
+    Object.keys(ps).forEach(function (k) { var s = ps[k]; if (s.locked) { var nm = s.by || '名無し'; tally[nm] = (tally[nm] || 0) + 1; colors[nm] = s.byColor || '#8a9bb5'; } });
     var list = $('doneList'); list.textContent = '';
-    Object.keys(tally).sort(function (a, b) { return tally[b] - tally[a]; }).forEach(function (n) {
-      var li = document.createElement('li'), dot = document.createElement('span');
-      dot.className = 'chip'; var i = document.createElement('i'); i.style.background = colors[n]; dot.appendChild(i);
-      dot.appendChild(document.createTextNode(n + '  ' + tally[n] + '個'));
-      li.appendChild(dot); list.appendChild(li);
+    Object.keys(tally).sort(function (a, b) { return tally[b] - tally[a]; }).forEach(function (nm) {
+      var li = document.createElement('li'), dot = document.createElement('span'), b = document.createElement('b');
+      dot.className = 'person'; var i = document.createElement('i'); i.style.background = colors[nm]; dot.appendChild(i);
+      dot.appendChild(document.createTextNode(nm));
+      b.textContent = tally[nm] + 'ピース';
+      li.appendChild(dot); li.appendChild(b); list.appendChild(li);
     });
-    $('doneTitle').textContent = '完成しました。タイムは ' + (totalMs != null ? fmt(totalMs) : '') + ' です。';
+    var people = Object.keys(tally).length;
+    $('doneTime').textContent = (totalMs != null ? 'タイム ' + fmt(totalMs) + '。' : '') + people + '人ではめました。';
     $('done').hidden = false;
     $('slots').style.opacity = '0';
+    $('hint').disabled = true;
   }
 
   /* ---------- animation loop ---------- */
@@ -344,7 +352,7 @@
   function sendCursor(w) {
     if (!db || !joined) return;
     var n = Date.now();
-    if (n - lastCur < 80) return;
+    if (w && n - lastCur < 80) return;
     lastCur = n;
     db.ref(base + '/players/' + me.id + '/cur').set(w ? { x: r1(w.x), y: r1(w.y) } : null);
   }
@@ -363,7 +371,7 @@
     p.dragging = true;
     var d = { p: p, dx: w.x - p.x, dy: w.y - p.y, id: e.pointerId, pending: true, up: false, timer: 0 };
     drag = d;
-    p.el.style.zIndex = 2000; p.el.style.filter = 'drop-shadow(0 8px 10px rgba(0,0,0,0.42))';
+    p.el.style.zIndex = 2000; p.el.style.filter = LIFT;
     try { stage.setPointerCapture(e.pointerId); } catch (err) {}
     var hr = pref(p.i).child('holder');
     hr.transaction(function (cur) { return cur ? undefined : me.id; }).then(function (res) {
@@ -382,16 +390,16 @@
     }).catch(function (err) { console.error(err); p.dragging = false; if (drag === d) drag = null; });
   });
   stage.addEventListener('pointermove', function (e) {
-    var w = toWorld(e);
     if (pan && e.pointerId === pan.id) {
       viewport.scrollLeft = pan.sl - (e.clientX - pan.x);
       viewport.scrollTop = pan.st - (e.clientY - pan.y);
       return;
     }
+    var w = toWorld(e);
     if (!drag || e.pointerId !== drag.id) { if (e.pointerType === 'mouse') sendCursor(w); return; }
     var p = drag.p, d = drag;
-    p.x = Math.max(-G.t - G.pw * 0.4, Math.min(WW - G.pw * 0.6, w.x - d.dx));
-    p.y = Math.max(-G.t - G.ph * 0.4, Math.min(WH - G.ph * 0.6, w.y - d.dy));
+    p.x = Math.max(-G.t - G.pw * 0.4, Math.min(L.WW - G.pw * 0.6, w.x - d.dx));
+    p.y = Math.max(-G.t - G.ph * 0.4, Math.min(L.WH - G.ph * 0.6, w.y - d.dy));
     p.tx = p.x; p.ty = p.y;
     sendCursor(w);
     if (!d.timer) {
@@ -412,8 +420,8 @@
       : { x: r1(p.x), y: r1(p.y), holder: null };
     pref(p.i).update(upd);
     pref(p.i).child('holder').onDisconnect().cancel();
-    if (near) { p.locked = true; p.tx = p.hx; p.ty = p.hy; p.el.classList.add('locked'); p.el.style.filter = ''; p.el.style.zIndex = 5; }
-    else { p.tx = p.x; p.ty = p.y; }
+    if (near) { p.locked = true; p.tx = p.hx; p.ty = p.hy; p.el.style.filter = 'none'; p.el.style.zIndex = 5; if (hintPiece === p) clearHint(); }
+    else { p.tx = p.x; p.ty = p.y; p.el.style.filter = SHADOW; }
   }
   function release(e) {
     if (pan && e.pointerId === pan.id) { pan = null; return; }
@@ -423,21 +431,46 @@
   }
   stage.addEventListener('pointerup', release);
   stage.addEventListener('pointercancel', release);
-  stage.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse' && !drag) { lastCur = 0; sendCursor(null); } });
+  stage.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse' && !drag) sendCursor(null); });
+
+  /* ---------- hints (each person gets 3 per room) ---------- */
+  function hintsLeft() { var v = lsGet('jp_hint_' + code); return v === null ? HINTS_PER_ROOM : Math.max(0, +v || 0); }
+  function showHintCount() { var n = hintsLeft(); $('hintCount').textContent = n; $('hint').disabled = n <= 0 || doneShown; }
+  function clearHint() {
+    clearTimeout(hintTimer);
+    if (hintPiece && hintPiece.el) hintPiece.el.classList.remove('hinted');
+    hintPiece = null; drawSlots();
+  }
+  $('hint').addEventListener('click', function () {
+    if (!P.length || hintsLeft() <= 0) return;
+    var cands = P.filter(function (p) { return !p.locked && !(p.holder && p.holder !== me.id); });
+    if (!cands.length) return;
+    clearHint();
+    var p = cands[Math.floor(Math.random() * cands.length)];
+    hintPiece = p; p.el.classList.add('hinted'); drawSlots();
+    lsSet('jp_hint_' + code, String(hintsLeft() - 1)); showHintCount();
+    if (viewport.scrollWidth > viewport.clientWidth + 2 || viewport.scrollHeight > viewport.clientHeight + 2) {
+      viewport.scrollTo({ left: p.x * scale - viewport.clientWidth / 2, top: p.y * scale - viewport.clientHeight / 2, behavior: reduceMotion ? 'auto' : 'smooth' });
+    }
+    hintTimer = setTimeout(clearHint, 4000);
+  });
 
   /* ---------- rooms ---------- */
   function showRoomUI(on) {
-    $('lobby').hidden = on; $('room').hidden = !on; $('stats').hidden = !on;
-    $('subtitle').textContent = on ? 'ピースをドラッグして、正しい場所の近くで離すとはまります。' : 'みんなで同じ盤面を、同時に組み立てます。';
+    $('lobby').hidden = on; $('room').hidden = !on; $('right').hidden = !on;
+    $('app').classList.toggle('lobby-mode', !on);
+    $('navHome').setAttribute('aria-current', on ? 'false' : 'page');
+    $('navPuzzle').setAttribute('aria-current', on ? 'page' : 'false');
+    if (on) $('navHome').removeAttribute('aria-current'); else $('navPuzzle').removeAttribute('aria-current');
   }
   function createRoom(puzzleId, cols, rows) {
     var newCode = rid(6), seed = Math.floor(Math.random() * 2000000000) + 1;
-    var g = makeGeo(cols, rows, seed), pieces = {}, i, R = Math.random;
-    for (i = 0; i < cols * rows; i++) {
-      pieces[i] = { x: r1(TX - g.t + R() * Math.max(1, TW - g.pw)), y: r1(TY - g.t + R() * Math.max(1, TH - g.ph)), z: i + 1, locked: false };
-    }
+    var g = makeGeo(cols, rows, seed), lay = makeLayout(cols, rows), pieces = {}, i, R = Math.random;
+    var sw = g.pw + 2 * g.t, sh = g.ph + 2 * g.t;
+    var x0 = lay.TX + 8, y0 = lay.TY + 26, xr = Math.max(1, lay.TW - 16 - sw), yr = Math.max(1, lay.TH - 34 - sh);
+    for (i = 0; i < cols * rows; i++) pieces[i] = { x: r1(x0 + R() * xr), y: r1(y0 + R() * yr), z: i + 1, locked: false };
     return db.ref('rooms/' + newCode).set({
-      meta: { puzzleId: puzzleId, cols: cols, rows: rows, seed: seed, createdAt: TS },
+      meta: { puzzleId: puzzleId, cols: cols, rows: rows, seed: seed, createdAt: TS, v: 2 },
       pieces: pieces
     }).then(function () { return newCode; });
   }
@@ -445,20 +478,24 @@
   function enterRoom(roomCode) {
     setMsg('つなげています…');
     code = roomCode; base = 'rooms/' + code;
-    var opened = db.ref(base + '/meta').once('value');
-    return opened.then(function (snap) {
+    return db.ref(base + '/meta').once('value').then(function (snap) {
       meta = snap.val();
       if (!meta) { code = null; setMsg('この部屋は見つかりませんでした。リンクが違うか、部屋が削除されています。', true); return; }
+      lsSet('jp_last', roomCode);
       return loadArt(findPuzzle(meta.puzzleId)).then(function (a) {
-        art = a; G = makeGeo(meta.cols, meta.rows, meta.seed);
+        art = a; G = makeGeo(meta.cols, meta.rows, meta.seed); L = makeLayout(meta.cols, meta.rows);
         P = [];
         for (var r = 0; r < G.rows; r++) for (var c = 0; c < G.cols; c++) {
-          P.push({ i: r * G.cols + c, r: r, c: c, hx: FX + c * G.pw - G.t, hy: FY + r * G.ph - G.t, x: 0, y: 0, tx: 0, ty: 0, locked: false, holder: null, zSrv: 0, rank: 0, dragging: false, inited: false });
+          P.push({ i: r * G.cols + c, r: r, c: c, hx: L.FX + c * G.pw - G.t, hy: L.FY + r * G.ph - G.t, x: 0, y: 0, tx: 0, ty: 0, locked: false, holder: null, zSrv: 0, rank: 0, dragging: false, inited: false });
         }
-        doneShown = false; totalMs = null; lastVal = null;
+        doneShown = false; totalMs = null; lastVal = null; hintPiece = null;
         $('done').hidden = true; $('nextBtn').hidden = true; $('slots').style.opacity = '';
-        showRoomUI(true);
+        var lab = puzzleLabel(meta.puzzleId), pn = $('puzzleName');
+        pn.textContent = ''; var b = document.createElement('b'); b.textContent = lab.num;
+        pn.appendChild(b); pn.appendChild(document.createTextNode(' ' + lab.title + '・' + (meta.cols * meta.rows) + 'ピース'));
+        showRoomUI(true); setMsg('');
         $('inviteUrl').value = location.origin + location.pathname + '?room=' + code;
+        showHintCount();
         layout(); renderPieces();
         return db.ref(base + '/players').once('value').then(function (ps) {
           var used = {}, pv = ps.val() || {};
@@ -478,9 +515,23 @@
       setMsg('つなげませんでした。しばらくしてから、ページを開き直してください。', true);
     });
   }
+  function leaveRoom() {
+    if (code && db) {
+      db.ref(base).off();
+      db.ref(base + '/players/' + me.id).remove();
+    }
+    joined = false; clearHint(); clearRoom(); code = null; meta = null; G = null;
+    history.pushState({}, '', location.pathname);
+    joinMode = false; urlRoom = '';
+    showRoomUI(false); setLobbyMode();
+  }
+  function clearRoom() {
+    P.forEach(function (p) { if (p.el && p.el.parentNode) p.el.parentNode.removeChild(p.el); });
+    P = []; lastVal = null; drag = null;
+    Object.keys(curEls).forEach(function (id) { if (curEls[id].parentNode) curEls[id].parentNode.removeChild(curEls[id]); delete curEls[id]; });
+  }
 
-  /* timer */
-  timerId = setInterval(function () {
+  setInterval(function () {
     if (!meta || !meta.createdAt || !P.length) return;
     $('time').textContent = fmt(doneShown && totalMs != null ? totalMs : serverNow() - meta.createdAt);
   }, 500);
@@ -493,12 +544,13 @@
     var box = $('picks'); box.textContent = '';
     var list = CFG.puzzles || [];
     if (!chosenPuzzle && list.length) chosenPuzzle = list[0].id;
-    list.forEach(function (pz) {
+    list.forEach(function (pz, idx) {
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'pick'; b.dataset.id = pz.id;
       b.setAttribute('aria-pressed', pz.id === chosenPuzzle ? 'true' : 'false');
       var cv = document.createElement('canvas'); cv.width = 300; cv.height = 200;
-      var sp = document.createElement('span'); sp.textContent = pz.title || pz.id;
+      var sp = document.createElement('span'), num = document.createElement('b');
+      num.textContent = '#' + pad2(idx + 1); sp.appendChild(num); sp.appendChild(document.createTextNode(pz.title || pz.id));
       b.appendChild(cv); b.appendChild(sp); box.appendChild(b);
       loadArt(pz).then(function (a) { cv.getContext('2d').drawImage(a, 0, 0, 300, 200); });
       b.addEventListener('click', function () {
@@ -507,12 +559,18 @@
       });
     });
   }
+  $('sizes').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    chosenSize = b.dataset.size;
+    $('sizes').querySelectorAll('button').forEach(function (n) { n.setAttribute('aria-pressed', n === b ? 'true' : 'false'); });
+  });
   function setLobbyMode() {
-    $('createOnly').style.display = joinMode ? 'none' : 'contents';
-    $('go').textContent = joinMode ? 'この部屋に参加する' : '部屋を作る';
-    $('lobbyTitle').textContent = joinMode ? 'パズルに参加する' : 'パズルを始める';
+    $('createOnly').hidden = joinMode;
+    $('goText').textContent = joinMode ? 'この部屋に参加する' : '部屋をつくる';
+    $('lobbyTitle').textContent = joinMode ? '招待されたパズルに参加する' : 'みんなでパズルをはじめる';
     $('toCreate').hidden = !joinMode;
-    $('inviteBar').hidden = false;
+    var last = lsGet('jp_last');
+    $('resume').hidden = joinMode || !last;
   }
   function needName() {
     var n = $('name').value.trim().slice(0, 12);
@@ -520,25 +578,35 @@
     me.name = n; lsSet('jp_name', n);
     return n;
   }
+  function busy(p) { $('go').disabled = true; $('resume').disabled = true; p.then(done, done); function done() { $('go').disabled = false; $('resume').disabled = false; } }
+  function ready() {
+    if (!needName()) return false;
+    if (!initFirebase()) { setMsg('Firebaseに接続できませんでした。ネットワークを確認してから、ページを開き直してください。', true); return false; }
+    return true;
+  }
   $('name').value = me.name;
-  buildPicks(); setLobbyMode();
+  showRoomUI(false); buildPicks(); setLobbyMode();
 
   $('go').addEventListener('click', function () {
-    if (!needName()) return;
-    if (!initFirebase()) { setMsg('Firebaseに接続できませんでした。ネットワークを確認してから、ページを開き直してください。', true); return; }
-    $('go').disabled = true;
-    var p;
-    if (joinMode) p = enterRoom(urlRoom);
-    else {
-      var sz = $('size').value.split('x');
-      p = createRoom(chosenPuzzle, +sz[0], +sz[1]).then(function (c) {
-        history.pushState({}, '', '?room=' + c);
-        return enterRoom(c);
-      });
-    }
-    p.then(function () { $('go').disabled = false; }, function () { $('go').disabled = false; });
+    if (!ready()) return;
+    if (joinMode) { busy(enterRoom(urlRoom)); return; }
+    var sz = chosenSize.split('x');
+    busy(createRoom(chosenPuzzle, +sz[0], +sz[1]).then(function (c) {
+      history.pushState({}, '', '?room=' + c);
+      return enterRoom(c);
+    }));
+  });
+  $('resume').addEventListener('click', function () {
+    var last = lsGet('jp_last'); if (!last || !ready()) return;
+    history.pushState({}, '', '?room=' + last);
+    busy(enterRoom(last));
   });
   $('toCreate').addEventListener('click', function () { history.replaceState({}, '', location.pathname); joinMode = false; urlRoom = ''; setMsg(''); setLobbyMode(); });
+  $('navHome').addEventListener('click', function () { if (code) leaveRoom(); });
+  $('navPuzzle').addEventListener('click', function () {
+    if (code) return;
+    if (!$('resume').hidden) $('resume').click(); else $('go').focus();
+  });
 
   /* ---------- room controls ---------- */
   $('zoom').addEventListener('change', function () { if (G) { layout(); renderPieces(); } });
@@ -547,23 +615,20 @@
     $('peek').setAttribute('aria-pressed', on ? 'true' : 'false'); $('ghost').hidden = !on;
   });
   $('copy').addEventListener('click', function () {
-    var inp = $('inviteUrl');
-    function fallback() { inp.focus(); inp.select(); $('copy').textContent = '選択しました'; setTimeout(function () { $('copy').textContent = 'コピー'; }, 1500); }
-    try {
-      navigator.clipboard.writeText(inp.value).then(function () {
-        $('copy').textContent = 'コピーしました'; setTimeout(function () { $('copy').textContent = 'コピー'; }, 1500);
-      }, fallback);
-    } catch (e) { fallback(); }
+    var inp = $('inviteUrl'), btn = $('copy');
+    function say(t) { btn.textContent = t; setTimeout(function () { btn.textContent = 'コピー'; }, 1500); }
+    function fallback() { inp.focus(); inp.select(); say('選択しました'); }
+    try { navigator.clipboard.writeText(inp.value).then(function () { say('コピーしました'); }, fallback); } catch (e) { fallback(); }
   });
   $('again').addEventListener('click', function () {
     if (!meta) return;
     $('again').disabled = true;
-    var oldCode = code;
-    createRoom(meta.puzzleId, meta.cols, meta.rows).then(function (c) {
+    var oldCode = code, m = meta;
+    createRoom(m.puzzleId, m.cols, m.rows).then(function (c) {
       db.ref('rooms/' + oldCode + '/next').set(c);
-      db.ref(base + '/players/' + me.id).remove();
       db.ref(base).off();
-      joined = false; clearRoom();
+      db.ref(base + '/players/' + me.id).remove();
+      joined = false; clearHint(); clearRoom();
       history.pushState({}, '', '?room=' + c);
       return enterRoom(c);
     }).then(function () { $('again').disabled = false; }, function () { $('again').disabled = false; });
@@ -571,27 +636,14 @@
   $('nextBtn').addEventListener('click', function () {
     var c = $('nextBtn').dataset.code; if (c) location.href = location.pathname + '?room=' + c;
   });
-  function clearRoom() {
-    P.forEach(function (p) { if (p.el && p.el.parentNode) p.el.parentNode.removeChild(p.el); });
-    P = []; lastVal = null; drag = null;
-    Object.keys(curEls).forEach(function (id) { if (curEls[id].parentNode) curEls[id].parentNode.removeChild(curEls[id]); delete curEls[id]; });
-  }
 
   var rt;
   window.addEventListener('resize', function () {
     clearTimeout(rt);
-    rt = setTimeout(function () { if (G && !drag && !$('room').hidden) { layout(); renderPieces(); } }, 200);
+    rt = setTimeout(function () { if (G && !drag && code) { layout(); renderPieces(); } }, 200);
   });
-  try {
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawSlots);
-    new MutationObserver(drawSlots).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-  } catch (err) {}
 
-  /* Small screens start zoomed in so pieces are big enough to grab. */
   if (window.innerWidth < 700) $('zoom').value = '2';
-
   requestAnimationFrame(tick);
-
-  /* Opening an invite link with a saved name joins straight away. */
-  if (joinMode && me.name) { setMsg('名前は「' + me.name + '」で参加します。変えるときは書き換えてください。'); }
+  if (joinMode && me.name) setMsg('名前は「' + me.name + '」で参加します。変えるときは書き換えてください。');
 })();
