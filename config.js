@@ -11,7 +11,10 @@ window.APP_CONFIG = {
     appId: "1:917981358209:web:71ccc374ac2ea784e50580"
   },
   puzzles: [
-    { id: "moonboat", title: "ほしふる夜のこぶね", src: "images/puzzle-moonboat.jpg" }
+    { id: "moonboat", title: "ほしふる夜のこぶね", src: "images/puzzle-moonboat.jpg" },
+    { id: "tea-party", title: "3色王子のお茶会", src: "images/puzzle-tea-party.jpg" },
+    { id: "corgi", title: "しあわせのならびかた", src: "images/puzzle-corgi.jpg" },
+    { id: "little-favorites", title: "ちいさな好きをあつめて", src: "images/puzzle-little-favorites.jpg" }
     // { id: "member01", title: "○○さんの作品", src: "images/member01.jpg" },
   ],
   // BGM。曲を増やすときは bgm/ フォルダにmp3を入れて1行足します。いちばん上の曲が最初に流れます。
