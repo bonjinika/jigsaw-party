@@ -486,6 +486,7 @@
   /* ---------- rooms ---------- */
   function showRoomUI(on) {
     $('lobby').hidden = on; $('room').hidden = !on; $('right').hidden = !on;
+    if (!on) $('peekWin').hidden = true;
     $('app').classList.toggle('lobby-mode', !on);
     $('navHome').setAttribute('aria-current', on ? 'false' : 'page');
     $('navPuzzle').setAttribute('aria-current', on ? 'page' : 'false');
@@ -526,6 +527,8 @@
         $('inviteUrl').value = location.origin + location.pathname + '?room=' + code;
         showHintCount();
         layout(); renderPieces();
+        $('ghostToggle').checked = !!peekState.ghost; $('ghost').hidden = !peekState.ghost;
+        showPeek(!!peekState.open);
         return db.ref(base + '/players').once('value').then(function (ps) {
           var used = {}, pv = ps.val() || {};
           Object.keys(pv).forEach(function (id) { if (id !== me.id) used[pv[id].color] = true; });
@@ -644,10 +647,59 @@
 
   /* ---------- room controls ---------- */
   $('zoom').addEventListener('change', function () { if (G) { layout(); renderPieces(); } });
+  /* ---------- floating reference picture (per viewer; remembers where you left it) ---------- */
+  var PEEK_SIZES = [180, 260, 360, 500];
+  var peekState = (function () { try { return JSON.parse(lsGet('jp_peek') || '{}') || {}; } catch (e) { return {}; } })();
+  function savePeek() { lsSet('jp_peek', JSON.stringify(peekState)); }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function peekSize() { return peekState.size == null ? (window.innerWidth < 700 ? 0 : 1) : clamp(peekState.size, 0, PEEK_SIZES.length - 1); }
+  function drawPeek() {
+    if (!art) return;
+    var w = Math.min(PEEK_SIZES[peekSize()], window.innerWidth - 40), h = Math.round(w * FH / FW), cv = $('peekCanvas');
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    var g = cv.getContext('2d'); g.imageSmoothingQuality = 'high';
+    g.drawImage(art, 0, 0, cv.width, cv.height);
+    $('peekSmaller').disabled = peekSize() === 0;
+    $('peekBigger').disabled = peekSize() === PEEK_SIZES.length - 1;
+  }
+  function placePeek() {
+    var win = $('peekWin'), W = win.offsetWidth, H = win.offsetHeight, x = peekState.x, y = peekState.y;
+    if (x == null || y == null) { x = window.innerWidth < 700 ? window.innerWidth - W - 16 : 16; y = window.innerHeight - H - 16; }
+    x = clamp(x, 8, Math.max(8, window.innerWidth - W - 8));
+    y = clamp(y, 8, Math.max(8, window.innerHeight - H - 8));
+    win.style.left = x + 'px'; win.style.top = y + 'px';
+  }
+  function showPeek(on) {
+    $('peekWin').hidden = !on;
+    $('peek').setAttribute('aria-pressed', on ? 'true' : 'false');
+    $('peekQuick').setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (on) { drawPeek(); placePeek(); }
+  }
   $('peek').addEventListener('click', function () {
-    var on = $('peek').getAttribute('aria-pressed') !== 'true';
-    $('peek').setAttribute('aria-pressed', on ? 'true' : 'false'); $('ghost').hidden = !on;
+    peekState.open = $('peekWin').hidden; savePeek(); showPeek(peekState.open);
   });
+  $('peekQuick').addEventListener('click', function () { $('peek').click(); });
+  $('peekClose').addEventListener('click', function () { peekState.open = false; savePeek(); showPeek(false); $('peek').focus(); });
+  $('peekSmaller').addEventListener('click', function () { peekState.size = Math.max(0, peekSize() - 1); savePeek(); drawPeek(); placePeek(); });
+  $('peekBigger').addEventListener('click', function () { peekState.size = Math.min(PEEK_SIZES.length - 1, peekSize() + 1); savePeek(); drawPeek(); placePeek(); });
+  $('ghostToggle').addEventListener('change', function () { peekState.ghost = this.checked; savePeek(); $('ghost').hidden = !this.checked; });
+  (function dragPeek() {
+    var win = $('peekWin'), d = null;
+    win.addEventListener('pointerdown', function (e) {
+      if (e.button > 0 || e.target.closest('button, label, input')) return;
+      d = { id: e.pointerId, dx: e.clientX - win.offsetLeft, dy: e.clientY - win.offsetTop };
+      try { win.setPointerCapture(e.pointerId); } catch (err) {}
+      win.classList.add('dragging'); e.preventDefault();
+    });
+    win.addEventListener('pointermove', function (e) {
+      if (!d || e.pointerId !== d.id) return;
+      peekState.x = e.clientX - d.dx; peekState.y = e.clientY - d.dy; placePeek();
+    });
+    function end(e) { if (!d || e.pointerId !== d.id) return; d = null; win.classList.remove('dragging'); peekState.x = win.offsetLeft; peekState.y = win.offsetTop; savePeek(); }
+    win.addEventListener('pointerup', end); win.addEventListener('pointercancel', end);
+  })();
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('peekWin').hidden) $('peekClose').click(); });
   $('copy').addEventListener('click', function () {
     var inp = $('inviteUrl'), btn = $('copy');
     function say(t) { btn.textContent = t; setTimeout(function () { btn.textContent = 'コピー'; }, 1500); }
@@ -674,7 +726,10 @@
   var rt;
   window.addEventListener('resize', function () {
     clearTimeout(rt);
-    rt = setTimeout(function () { if (G && !drag && code) { layout(); renderPieces(); } }, 200);
+    rt = setTimeout(function () {
+      if (G && !drag && code) { layout(); renderPieces(); }
+      if (!$('peekWin').hidden) { drawPeek(); placePeek(); }
+    }, 200);
   });
 
   if (window.innerWidth < 700) $('zoom').value = '2';

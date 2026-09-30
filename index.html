@@ -109,6 +109,23 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
 .tips { padding: 10px 16px; display: flex; flex-direction: column; gap: 2px; }
 .hint-line { font-size: 12.5px; color: var(--ink-soft); margin: 0; }
 
+/* ---- floating reference picture ---- */
+.peekwin { position: fixed; z-index: 4000; left: 16px; top: 16px; display: flex; flex-direction: column; gap: 6px;
+  padding: 6px 8px 10px; border-radius: 18px; background: var(--glass); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  box-shadow: 0 12px 30px rgba(45, 69, 105, 0.28), 0 1px 3px rgba(45, 69, 105, 0.12);
+  touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.peekwin.dragging { cursor: grabbing; }
+.peek-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-left: 6px; font-size: 13.5px; letter-spacing: 0.08em; }
+.peek-head span { display: inline-flex; align-items: center; gap: 6px; }
+.peek-head span svg { width: 18px; height: 18px; color: var(--blue-mid); }
+.peek-tools { display: flex; gap: 2px; }
+.peek-tools button { border: 0; background: transparent; width: 32px; height: 32px; border-radius: 50%; font-size: 18px; line-height: 1; color: var(--ink-soft); cursor: pointer; font-family: var(--font-num); }
+.peek-tools button:hover { background: var(--paper-soft); }
+.peek-tools button:disabled { opacity: 0.3; cursor: default; background: transparent; }
+#peekCanvas { display: block; border-radius: 10px; max-width: none; }
+.peek-ghost { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-soft); padding-inline: 6px; cursor: pointer; }
+.peek-ghost input { accent-color: var(--blue-mid); width: 16px; height: 16px; margin: 0; }
+
 /* ---- BGM ---- */
 .bgm { padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 12px; }
 .bgm-head { display: flex; align-items: center; justify-content: space-between; }
@@ -220,7 +237,7 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
 </style>
 </head>
 <body>
-<div class="scene" aria-hidden="true"><img class="bg" src="images/bg.jpg?v=20260930c" alt=""><img class="blink" id="blink" src="images/blink.png?v=20260930c" alt=""></div>
+<div class="scene" aria-hidden="true"><img class="bg" src="images/bg.jpg?v=20260930e" alt=""><img class="blink" id="blink" src="images/blink.png?v=20260930e" alt=""></div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-squid" viewBox="0 0 48 48">
     <path d="M24 4c-8 0-13 8-13 17 0 3 1 5 3 6l-3 11c-.4 1.6 1.6 2.5 2.6 1.2L19 33l1 9c.2 1.6 2.5 1.8 2.9.2L24 34l1.1 8.2c.4 1.6 2.7 1.4 2.9-.2l1-9 5.4 6.2c1 1.3 3 .4 2.6-1.2l-3-11c2-1 3-3 3-6C37 12 32 4 24 4z" fill="#fff" stroke="#6fa3e0" stroke-width="2.2" stroke-linejoin="round"/>
@@ -317,6 +334,7 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
       <div class="titlebar">
         <div class="chip-title"><svg><use href="#i-image"/></svg><span id="puzzleName"><b>#01</b> サンプル</span></div>
         <div class="tools">
+          <button type="button" class="pill icon-pill" id="peekQuick" aria-pressed="false" aria-label="見本の絵を出す"><svg><use href="#i-eye"/></svg><span>見本</span></button>
           <button type="button" class="pill icon-pill" id="quickMute" aria-pressed="false" aria-label="BGMのミュート"><svg><use href="#i-sound"/></svg><span>BGM</span></button>
           <label for="zoom">拡大</label>
           <select id="zoom" class="pill">
@@ -382,10 +400,23 @@ select.pill { appearance: none; -webkit-appearance: none; padding-right: 34px; b
   </aside>
 </div>
 
+<div class="peekwin" id="peekWin" hidden role="dialog" aria-label="見本の絵">
+  <div class="peek-head">
+    <span><svg><use href="#i-image"/></svg>見本</span>
+    <div class="peek-tools">
+      <button type="button" id="peekSmaller" aria-label="見本を小さくする">−</button>
+      <button type="button" id="peekBigger" aria-label="見本を大きくする">+</button>
+      <button type="button" id="peekClose" aria-label="見本を閉じる">×</button>
+    </div>
+  </div>
+  <canvas id="peekCanvas" aria-hidden="true"></canvas>
+  <label class="peek-ghost"><input type="checkbox" id="ghostToggle">盤面にもうすく重ねる</label>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="config.js?v=20260930c"></script>
-<script src="app.js?v=20260930c"></script>
-<script src="bgm.js?v=20260930c"></script>
+<script src="config.js?v=20260930e"></script>
+<script src="app.js?v=20260930e"></script>
+<script src="bgm.js?v=20260930e"></script>
 </body>
 </html>
