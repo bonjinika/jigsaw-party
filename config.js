@@ -11,15 +11,15 @@ window.APP_CONFIG = {
     appId: "1:917981358209:web:71ccc374ac2ea784e50580"
   },
   puzzles: [
-    { id: "sample", title: "うみの見えるすなはま(サンプル)", src: null }
+    { id: "moonboat", title: "ほしふる夜のこぶね", src: "images/puzzle-moonboat.jpg" }
     // { id: "member01", title: "○○さんの作品", src: "images/member01.jpg" },
   ],
-  // BGM。曲を増やすときは bgm/ フォルダにmp3を入れて1行足します。
-  // loopStart / loopEnd(秒)は、つなぎ目なくループさせたいときだけ書きます(書かなければ曲全体をループ)。
+  // BGM。曲を増やすときは bgm/ フォルダにmp3を入れて1行足します。いちばん上の曲が最初に流れます。
   bgm: [
-    { id: "bgm1", title: "うみの見えるへや", src: "bgm/bgm1.mp3", loopStart: 1.0, loopEnd: 74.8461 },
-    { id: "bgm2", title: "なみとおひるね", src: "bgm/bgm2.mp3", loopStart: 1.0, loopEnd: 62.9355 },
-    { id: "bgm3", title: "ぱずるタイム", src: "bgm/bgm3.mp3", loopStart: 1.0, loopEnd: 77.8 }
+    { id: "moonlit", title: "Moonlit Puzzle", src: "bgm/moonlit-puzzle.mp3" },
+    { id: "sorou", title: "ピースが揃う時", src: "bgm/piece-ga-sorou-toki.mp3" },
+    { id: "window", title: "Window Seat Puzzle", src: "bgm/window-seat-puzzle.mp3" },
+    { id: "jikan", title: "ピースパズルの時間", src: "bgm/piece-puzzle-no-jikan.mp3" }
     // { id: "mysong", title: "好きな曲", src: "bgm/mysong.mp3" },
   ]
 };

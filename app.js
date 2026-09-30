@@ -98,10 +98,13 @@
       if (!puzzle || !puzzle.src) { done(makeSampleArt()); return; }
       var img = new Image();
       img.onload = function () {
-        var c = document.createElement('canvas'); c.width = FW; c.height = FH;
-        var g = c.getContext('2d'), s = Math.max(FW / img.width, FH / img.height);
-        var w = img.width * s, h = img.height * s;
-        g.drawImage(img, (FW - w) / 2, (FH - h) / 2, w, h);
+        /* keep the picture's own detail (up to 2.5x the board size) so zoomed pieces stay sharp */
+        var s = Math.max(FW / img.width, FH / img.height), up = Math.max(1, Math.min(1 / s, 2.5));
+        var CW = Math.round(FW * up), CH = Math.round(FH * up);
+        var c = document.createElement('canvas'); c.width = CW; c.height = CH;
+        var g = c.getContext('2d'), w = img.width * s * up, h = img.height * s * up;
+        g.imageSmoothingQuality = 'high';
+        g.drawImage(img, (CW - w) / 2, (CH - h) / 2, w, h);
         done(c);
       };
       img.onerror = function () { done(makeSampleArt()); };
@@ -205,7 +208,8 @@
     P.forEach(function (p) { if (p.el && p.el.parentNode) p.el.parentNode.removeChild(p.el); });
     var pad = document.createElement('canvas');
     pad.width = Math.ceil((FW + 2 * t) * k); pad.height = Math.ceil((FH + 2 * t) * k);
-    pad.getContext('2d').drawImage(art, t * k, t * k, FW * k, FH * k);
+    var pg = pad.getContext('2d'); pg.imageSmoothingQuality = 'high';
+    pg.drawImage(art, t * k, t * k, FW * k, FH * k);
     P.forEach(function (p) {
       var cv = document.createElement('canvas');
       cv.width = Math.ceil(sw * k); cv.height = Math.ceil(sh * k);

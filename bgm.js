@@ -35,7 +35,9 @@
   };
   if (!TRACKS.some(function (t) { return t.id === state.track; }) && TRACKS[0]) state.track = TRACKS[0].id;
 
-  var ctx = null, master = null, current = null, buffers = {}, loading = {}, playing = false, unlocked = false, loadToken = 0;
+  /* Songs stream through an <audio> element (light on phone memory even for long songs);
+     Web Audio is used only for the volume, which iPhones don't allow on <audio> directly. */
+  var ctx = null, master = null, current = null, playing = false, unlocked = false, pending = false;
 
   function trackById(id) { for (var i = 0; i < TRACKS.length; i++) if (TRACKS[i].id === id) return TRACKS[i]; return null; }
   function level() { return state.muted ? 0 : Math.pow(state.vol / 100, 2) * 0.9; }
@@ -46,88 +48,90 @@
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null;
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
-    ctx = new AC();
-    master = ctx.createGain();
-    master.gain.value = level();
-    master.connect(ctx.destination);
+    try {
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = level();
+      master.connect(ctx.destination);
+    } catch (e) { ctx = null; master = null; }
     return ctx;
   }
-  function decode(ab) {
-    return new Promise(function (resolve, reject) {
-      var p = ctx.decodeAudioData(ab, resolve, reject);
-      if (p && p.then) p.then(resolve, reject);
-    });
-  }
-  function load(t) {
-    if (buffers[t.id]) return Promise.resolve(buffers[t.id]);
-    if (loading[t.id]) return loading[t.id];
-    loading[t.id] = fetch(t.src).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.arrayBuffer();
-    }).then(decode).then(function (buf) {
-      /* keep only the most recent track in memory */
-      buffers = {}; buffers[t.id] = buf; delete loading[t.id];
-      return buf;
-    }, function (err) { delete loading[t.id]; throw err; });
-    return loading[t.id];
+  function ramp(param, to, secs) {
+    var now = ctx.currentTime;
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(param.value, now);
+    param.linearRampToValueAtTime(to, now + secs);
   }
 
-  function fadeOutAndStop(node, secs) {
+  function release(node, secs) {
     if (!node) return;
-    var now = ctx.currentTime;
-    try {
-      node.gain.gain.cancelScheduledValues(now);
-      node.gain.gain.setValueAtTime(node.gain.gain.value, now);
-      node.gain.gain.linearRampToValueAtTime(0, now + secs);
-      node.src.stop(now + secs + 0.05);
-    } catch (e) {}
+    var a = node.audio;
+    function done() { try { a.pause(); a.removeAttribute('src'); a.load(); } catch (e) {} }
+    if (node.gain && ctx) { ramp(node.gain.gain, 0, secs); setTimeout(done, secs * 1000 + 60); }
+    else done();
   }
 
   function start() {
-    if (!ensureCtx()) { setMsg('このブラウザではBGMを再生できません。'); return; }
     var t = trackById(state.track);
     if (!t) return;
+    ensureCtx();
     unlockAudio();
-    var token = ++loadToken;
-    playing = true; render();
-    if (!buffers[t.id]) setMsg('「' + t.title + '」を読み込んでいます…');
-    load(t).then(function (buf) {
-      if (token !== loadToken || !playing) return;
-      fadeOutAndStop(current, 0.8);
-      var src = ctx.createBufferSource(), g = ctx.createGain();
-      src.buffer = buf;
-      src.loop = true;
+    pending = false;
+    var old = current;
+    var a = new Audio();
+    a.preload = 'auto';
+    a.loop = !(typeof t.loopEnd === 'number');
+    a.src = t.src;
+    var node = { audio: a, gain: null, id: t.id };
+    if (ctx) {
+      try {
+        var srcNode = ctx.createMediaElementSource(a), g = ctx.createGain();
+        g.gain.value = 0;
+        srcNode.connect(g); g.connect(master);
+        node.gain = g;
+      } catch (e) { node.gain = null; }
+    }
+    if (!node.gain) a.volume = level();
+    if (typeof t.loopEnd === 'number') {
       var ls = typeof t.loopStart === 'number' ? t.loopStart : 0;
-      var le = typeof t.loopEnd === 'number' ? Math.min(t.loopEnd, buf.duration) : buf.duration;
-      if (le > ls) { src.loopStart = ls; src.loopEnd = le; }
-      g.gain.value = 0;
-      src.connect(g); g.connect(master);
-      src.start(0, ls);
-      g.gain.linearRampToValueAtTime(1, ctx.currentTime + 1.2);
-      current = { src: src, gain: g, id: t.id };
-      setMsg('♪ ' + t.title);
-    }, function () {
-      if (token !== loadToken) return;
-      playing = false; render();
+      a.addEventListener('timeupdate', function () { if (a.currentTime >= t.loopEnd) a.currentTime = ls; });
+      a.addEventListener('ended', function () { a.currentTime = ls; a.play().catch(function () {}); });
+    }
+    a.addEventListener('waiting', function () { if (current === node) setMsg('「' + t.title + '」を読み込んでいます…'); });
+    a.addEventListener('playing', function () { if (current === node) setMsg('♪ ' + t.title); });
+    a.addEventListener('error', function () {
+      if (current !== node) return;
+      playing = false; current = null; render();
       setMsg('「' + t.title + '」を読み込めませんでした。');
+    });
+    current = node;
+    playing = true; render();
+    setMsg('「' + t.title + '」を読み込んでいます…');
+    release(old, 0.8);
+    var p = a.play();
+    if (node.gain) ramp(node.gain.gain, 1, 1.2);
+    if (p && p.catch) p.catch(function (err) {
+      if (current !== node) return;
+      if (err && err.name === 'NotAllowedError') {
+        /* the browser wants a tap first: try again on the next one */
+        pending = true; setMsg('画面をタップすると、BGMが流れます。');
+      } else if (err && err.name !== 'AbortError') {
+        playing = false; current = null; render();
+        setMsg('「' + t.title + '」を再生できませんでした。');
+      }
     });
   }
   function stop() {
-    loadToken++;
-    playing = false;
-    if (ctx) fadeOutAndStop(current, 0.5);
+    playing = false; pending = false;
+    release(current, 0.5);
     current = null;
     render();
     setMsg('BGMは自分の画面だけで流れます。');
   }
   function applyLevel() {
     lsSet('jp_bgm_vol', String(state.vol)); lsSet('jp_bgm_muted', state.muted ? '1' : '0');
-    if (master) {
-      var now = ctx.currentTime;
-      master.gain.cancelScheduledValues(now);
-      master.gain.setValueAtTime(master.gain.value, now);
-      master.gain.linearRampToValueAtTime(level(), now + 0.15);
-    }
+    if (master && ctx) ramp(master.gain, level(), 0.15);
+    if (current && !current.gain) current.audio.volume = level();
     render();
   }
 
@@ -207,30 +211,38 @@
   /* Browsers (iPhone especially) only let a page make sound inside a real tap, click or key press.
      touchend / click / keydown / mousedown are the events every browser accepts for that. */
   function unlockAudio() {
-    if (!ensureCtx()) return;
+    if (!ctx) return;
     try {
-      var b = ctx.createBuffer(1, 1, 22050), s = ctx.createBufferSource();
-      s.buffer = b; s.connect(ctx.destination); s.start(0);
+      var buf = ctx.createBuffer(1, 1, 22050), s = ctx.createBufferSource();
+      s.buffer = buf; s.connect(ctx.destination); s.start(0);
     } catch (e) {}
     if (ctx.state !== 'running') { try { ctx.resume(); } catch (e) {} }
   }
+  /* Browsers (iPhone especially) only let a page make sound inside a real tap, click or key press. */
   function onGesture(e) {
     if (document.hidden) return;
+    var inBgmUi = e.target && e.target.closest && e.target.closest('#bgmPanel, #quickMute, #navBgm');
     if (!unlocked) {
       unlocked = true;
-      unlockAudio();
-      var inBgmUi = e.target && e.target.closest && e.target.closest('#bgmPanel, #quickMute, #navBgm');
+      ensureCtx(); unlockAudio();
       if (!inBgmUi && state.on && !state.muted) start();
       return;
     }
+    if (pending && playing && !inBgmUi) { start(); return; }
     if (ctx && playing && ctx.state !== 'running') unlockAudio();
+    if (current && playing && current.audio.paused) current.audio.play().catch(function () {});
   }
   ['touchend', 'click', 'keydown', 'mousedown'].forEach(function (n) { document.addEventListener(n, onGesture, true); });
 
   /* Pause while the tab is in the background. */
   document.addEventListener('visibilitychange', function () {
-    if (!ctx) return;
-    if (document.hidden) ctx.suspend();
-    else if (playing) ctx.resume();
+    if (document.hidden) {
+      if (current) current.audio.pause();
+      if (ctx) ctx.suspend();
+      return;
+    }
+    if (!playing || !current) return;
+    if (ctx) ctx.resume();
+    current.audio.play().catch(function () { pending = true; });
   });
 })();
